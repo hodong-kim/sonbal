@@ -83,6 +83,70 @@ Use [`docs/README.md`](docs/README.md) as the authoritative documentation
 router. It identifies which architecture, workflow, or roadmap document owns a
 given task. Repository-wide contributor rules are in [`AGENTS.md`](AGENTS.md).
 
+## Installation and quick start
+
+Prebuilt native packages are available for FreeBSD amd64 and Debian amd64.
+Package installation creates the non-login `sonbal` service user and its
+primary `sonbal` group. Installation is activation-neutral: installing the
+package does not enable or start the OpenAI service. Removing the package does
+not automatically remove the `sonbal` service user or `sonbal` group.
+
+### Direct stdio MCP
+
+Run `sonbal` with no connector argument to use the bounded stdio MCP transport:
+
+```sh
+sonbal
+```
+
+This mode does not require the OpenAI connector service, provider configuration,
+or persistent credential.
+
+### Debian
+
+Install a downloaded Debian package:
+
+```sh
+sudo apt install ./sonbal_VERSION_amd64.deb
+```
+
+Before activating the OpenAI connector, set `tunnel_id` in
+`/etc/sonbal/openai.json` and provision the persistent credential at
+`/var/lib/sonbal-openai/credential`. The credential directory must be
+`root:root` mode `0700`, and the credential must be `root:root` mode `0600`.
+
+Then explicitly enable and start the service:
+
+```sh
+sudo systemctl enable --now sonbal-openai.service
+systemctl status sonbal-openai.service
+```
+
+### FreeBSD
+
+Install a downloaded FreeBSD package:
+
+```sh
+sudo pkg install ./sonbal-VERSION.pkg
+```
+
+Before activating the OpenAI connector, set `tunnel_id` in
+`/usr/local/etc/sonbal/openai.json` and provision the persistent credential at
+`/var/db/sonbal-openai/credential`. The credential directory must be
+`root:wheel` mode `0700`, and the credential must be `root:wheel` mode `0600`.
+
+Then explicitly enable and start the service:
+
+```sh
+sudo sysrc sonbal_openai_enable=YES
+sudo service sonbal_openai start
+sudo service sonbal_openai status
+```
+
+See [`docs/workflows/installation.md`](docs/workflows/installation.md) for the
+full installation, credential-provisioning, activation, and validation
+procedure.
+
 ## Build and test
 
 ```sh
