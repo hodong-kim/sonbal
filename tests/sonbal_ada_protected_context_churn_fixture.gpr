@@ -1,0 +1,31 @@
+-- ============================================================================
+-- sonbal_ada_protected_context_churn_fixture.gpr
+-- Copyright (c) 2026 Hodong Kim <hodong@nimfsoft.com>
+-- SPDX-License-Identifier: 0BSD
+-- ============================================================================
+
+with "clair_config.gpr";
+with "sonbal_config.gpr";
+
+project Sonbal_Ada_Protected_Context_Churn_Fixture is
+   for Languages use ("Ada");
+   for Source_Dirs use (".");
+   for Object_Dir use
+     Sonbal_Config.Tests_Object_Root &
+     "/ada-protected-context-churn-fixture";
+   for Exec_Dir use Sonbal_Config.Tests_Exec_Dir;
+   for Create_Missing_Dirs use "True";
+   for Main use ("sonbal_ada_protected_context_churn_fixture.adb");
+
+   package Builder is
+      for Executable ("sonbal_ada_protected_context_churn_fixture.adb") use
+        "sonbal-ada-protected-context-churn-fixture";
+   end Builder;
+
+   package Compiler is
+      for Default_Switches ("Ada") use
+        ("-gnat2022", "-gnata", "-gnatVa", "-gnatwa", "-gnatwe", "-O0", "-g");
+   end Compiler;
+
+   package Linker renames Clair_Config.Linker;
+end Sonbal_Ada_Protected_Context_Churn_Fixture;

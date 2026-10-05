@@ -1,0 +1,6 @@
+bin/sonbal
+lib/sonbal/connectors/libsonbal_connector_openai.so
+@sample etc/sonbal/sonbal.yaml.sample
+@sample etc/sonbal/openai.json.sample
+etc/rc.d/sonbal_openai
+share/sonbal/package-revisions

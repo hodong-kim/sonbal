@@ -1,0 +1,49 @@
+-- ============================================================================
+-- sonbal_connector_openai.gpr
+-- Copyright (c) 2026 Hodong Kim <hodong@nimfsoft.com>
+-- SPDX-License-Identifier: 0BSD
+-- ============================================================================
+
+with "clair_config.gpr";
+with "sonbal_config.gpr";
+
+library project Sonbal_Connector_OpenAI is
+   for Languages use ("C");
+   for Source_Dirs use ("connectors/openai");
+   for Source_Files use
+     ("sonbal_connector_openai.c",
+      "sonbal_openai_protocol.c",
+      "sonbal_openai_http.c",
+      "sonbal_openai_transport.c");
+   for Object_Dir use
+     Sonbal_Config.Product_Object_Dir & "/connector-openai";
+   for Library_Dir use
+     Sonbal_Config.Product_Exec_Dir & "/connectors";
+   for Library_Name use "sonbal_connector_openai";
+   for Library_Kind use "relocatable";
+   for Create_Missing_Dirs use "True";
+
+   package Compiler is
+      case Clair_Config.Target_OS is
+         when "freebsd" =>
+            for Default_Switches ("C") use
+              ("-std=c11", "-Wall", "-Wextra", "-Werror",
+               "-I/usr/local/include",
+               "-I" & Project'Project_Dir & "include",
+               "-I" & Project'Project_Dir & "connectors/openai");
+         when others =>
+            for Default_Switches ("C") use
+              ("-std=c11", "-Wall", "-Wextra", "-Werror",
+               "-I" & Project'Project_Dir & "include",
+               "-I" & Project'Project_Dir & "connectors/openai");
+      end case;
+   end Compiler;
+
+   case Clair_Config.Target_OS is
+      when "freebsd" =>
+         for Library_Options use
+           ("-L/usr/local/lib", "-lcurl", "-lpthread");
+      when others =>
+         for Library_Options use ("-lcurl", "-lpthread");
+   end case;
+end Sonbal_Connector_OpenAI;

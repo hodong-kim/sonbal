@@ -1,0 +1,7 @@
+build/package/sonbal-revisions usr/share/doc/sonbal
+deployment/package-disclaimer.txt usr/share/doc/sonbal
+deployment/linux/config/sonbal.yaml etc/sonbal
+deployment/linux/config/openai.json etc/sonbal
+deployment/linux/systemd/sonbal-openai.service usr/lib/systemd/system
+deployment/linux/sysusers/sonbal.conf usr/lib/sysusers.d
+deployment/linux/tmpfiles/sonbal.conf usr/lib/tmpfiles.d

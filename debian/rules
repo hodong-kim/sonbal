@@ -1,0 +1,44 @@
+#!/usr/bin/make -f
+# =============================================================================
+# rules
+# Copyright (c) 2026 Hodong Kim <hodong@nimfsoft.com>
+# SPDX-License-Identifier: 0BSD
+# =============================================================================
+
+SONBAL_RELEASE_ENV = \
+	CLAIR_BUILD_PROFILE=release \
+	CLAIR_SECURITY_INSTRUMENTATION=none \
+	CLAIR_LIBRARY_TYPE=static-pic \
+	SONBAL_BUILD_PROFILE=release
+
+%:
+	dh $@ --with=installsysusers
+
+override_dh_auto_configure:
+	:
+
+override_dh_auto_build:
+	$(SONBAL_RELEASE_ENV) rake package-workspace-check
+	$(SONBAL_RELEASE_ENV) rake build
+	$(SONBAL_RELEASE_ENV) rake debian-package-metadata
+
+override_dh_auto_test:
+	$(SONBAL_RELEASE_ENV) rake test
+	rake linux-deployment-check
+
+override_dh_auto_install:
+	$(SONBAL_RELEASE_ENV) rake debian-stage-binary
+
+override_dh_auto_clean:
+	rake clean
+
+override_dh_installsystemd:
+	dh_installsystemd --no-scripts sonbal-openai.service
+
+
+override_dh_strip:
+	dh_strip --no-automatic-dbgsym
+	objcopy --remove-section=.GPR.linker_options \
+		--remove-section=.note.gnu.build-id debian/sonbal/usr/bin/sonbal
+	objcopy --remove-section=.note.gnu.build-id \
+		debian/sonbal/usr/lib/sonbal/connectors/libsonbal_connector_openai.so

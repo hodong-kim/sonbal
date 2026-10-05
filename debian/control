@@ -1,0 +1,24 @@
+Source: sonbal
+Section: utils
+Priority: optional
+Maintainer: Hodong Kim <hodong@nimfsoft.com>
+Build-Depends: debhelper-compat (= 13),
+ binutils,
+ clang,
+ git,
+ gnat-16,
+ gprbuild,
+ libpcre2-dev,
+ libyaml-dev,
+ libcurl4-openssl-dev,
+ rake,
+ ruby
+Standards-Version: 4.7.2
+Rules-Requires-Root: no
+
+Package: sonbal
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, systemd (>= 253)
+Description: bounded local MCP source-work service
+ Sonbal provides local source modification, build, test, and bounded process
+ execution tools through a single in-process OpenAI connector service.

@@ -1,0 +1,55 @@
+#!/bin/sh
+# =============================================================================
+# pre-install
+# Copyright (c) 2026 Hodong Kim <hodong@nimfsoft.com>
+# SPDX-License-Identifier: 0BSD
+# =============================================================================
+
+set -eu
+
+run_pw()
+{
+  if [ -n "${PKG_ROOTDIR:-}" ] && [ "${PKG_ROOTDIR}" != "/" ]; then
+    /usr/sbin/pw -R "$PKG_ROOTDIR" "$@"
+  else
+    /usr/sbin/pw "$@"
+  fi
+}
+
+if ! run_pw groupshow sonbal >/dev/null 2>&1; then
+  run_pw groupadd sonbal
+fi
+if ! run_pw usershow sonbal >/dev/null 2>&1; then
+  run_pw useradd sonbal -g sonbal \
+    -c "Sonbal service identity" -d /nonexistent -s /usr/sbin/nologin
+fi
+
+entry=$(run_pw usershow sonbal -7) || exit 1
+uid=$(printf '%s\n' "$entry" | /usr/bin/awk -F: '{ print $3 }')
+gid=$(printf '%s\n' "$entry" | /usr/bin/awk -F: '{ print $4 }')
+shell=$(printf '%s\n' "$entry" | /usr/bin/awk -F: '{ print $7 }')
+group_gid=$(run_pw groupshow sonbal | /usr/bin/awk -F: '{ print $3 }')
+
+if [ -z "$uid" ] || [ -z "$gid" ] || [ -z "$shell" ] ||
+   [ -z "$group_gid" ]; then
+  echo "sonbal: cannot resolve execution identity IDs" >&2
+  exit 1
+fi
+if [ "$uid" = 0 ]; then
+  echo "sonbal: execution identity unexpectedly resolves to root" >&2
+  exit 1
+fi
+if [ "$gid" = 0 ]; then
+  echo "sonbal: execution identity primary GID unexpectedly resolves to root" >&2
+  exit 1
+fi
+if [ "$gid" != "$group_gid" ]; then
+  echo "sonbal: execution identity primary group is not sonbal" >&2
+  exit 1
+fi
+if [ "$shell" != /usr/sbin/nologin ]; then
+  echo "sonbal: execution identity is not non-login" >&2
+  exit 1
+fi
+
+exit 0

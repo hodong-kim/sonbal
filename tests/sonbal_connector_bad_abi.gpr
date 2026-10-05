@@ -1,0 +1,24 @@
+-- ============================================================================
+-- sonbal_connector_bad_abi.gpr
+-- Copyright (c) 2026 Hodong Kim <hodong@nimfsoft.com>
+-- SPDX-License-Identifier: 0BSD
+-- ============================================================================
+
+with "../sonbal_config.gpr";
+
+library project Sonbal_Connector_Bad_ABI is
+   for Languages use ("C");
+   for Source_Dirs use ("connector_host");
+   for Source_Files use ("sonbal_connector_bad_abi.c");
+   for Object_Dir use Sonbal_Config.Tests_Object_Root & "/sonbal_connector_bad_abi";
+   for Library_Dir use Sonbal_Config.Tests_Exec_Dir;
+   for Library_Name use "sonbal_connector_bad_abi";
+   for Library_Kind use "relocatable";
+   for Create_Missing_Dirs use "True";
+
+   package Compiler is
+      for Default_Switches ("C") use
+        ("-std=c11", "-Wall", "-Wextra", "-Werror",
+         "-I" & Project'Project_Dir & "../include");
+   end Compiler;
+end Sonbal_Connector_Bad_ABI;

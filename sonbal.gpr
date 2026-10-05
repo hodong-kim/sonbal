@@ -1,0 +1,39 @@
+-- ============================================================================
+-- sonbal.gpr
+-- Copyright (c) 2026 Hodong Kim <hodong@nimfsoft.com>
+-- SPDX-License-Identifier: 0BSD
+-- ============================================================================
+
+with "clair.gpr";
+with "clair_config.gpr";
+with "sonbal_config.gpr";
+
+project Sonbal is
+   for Languages use ("Ada");
+   for Source_Dirs use
+     ("src", "src/platform/" & Clair_Config.Target_OS);
+   for Object_Dir use Sonbal_Config.Product_Object_Dir;
+   for Exec_Dir use Sonbal_Config.Product_Exec_Dir;
+   for Create_Missing_Dirs use "True";
+   for Main use ("sonbal_main.adb");
+
+   package Builder is
+      for Executable ("sonbal_main.adb") use "sonbal";
+   end Builder;
+
+   package Compiler is
+      Ada_Common_Switches :=
+        ("-gnat2022", "-gnata", "-gnatVa", "-gnatwa", "-gnatwe");
+
+      case Sonbal_Config.Build_Profile is
+         when "debug" =>
+            for Default_Switches ("Ada") use
+              Ada_Common_Switches & ("-O0", "-g");
+         when "release" =>
+            for Default_Switches ("Ada") use
+              Ada_Common_Switches & ("-O2");
+      end case;
+   end Compiler;
+
+   package Linker renames Clair_Config.Linker;
+end Sonbal;

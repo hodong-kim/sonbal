@@ -1,0 +1,60 @@
+#!/bin/sh
+# =============================================================================
+# sonbal.postinst
+# Copyright (c) 2026 Hodong Kim <hodong@nimfsoft.com>
+# SPDX-License-Identifier: 0BSD
+# =============================================================================
+
+set -e
+
+#DEBHELPER#
+
+show_disclaimer()
+{
+    disclaimer=/usr/share/doc/sonbal/package-disclaimer.txt
+    if [ ! -r "$disclaimer" ]; then
+        echo "sonbal: package disclaimer is missing" >&2
+        return 1
+    fi
+
+    printf '\n' >&2
+    /bin/cat "$disclaimer" >&2
+    printf '\n' >&2
+}
+
+verify_identity()
+{
+    uid=$(/usr/bin/id -u sonbal) || return 1
+    gid=$(/usr/bin/id -g sonbal) || return 1
+    group=$(/usr/bin/id -gn sonbal) || return 1
+    passwd_entry=$(/usr/bin/getent passwd sonbal) || return 1
+    shell=$(printf '%s\n' "$passwd_entry" | /usr/bin/cut -d: -f7) || return 1
+    if [ "$uid" = 0 ] || [ "$gid" = 0 ] || [ "$group" != sonbal ] ||
+       [ "$shell" != /usr/sbin/nologin ]; then
+        echo "sonbal: unsafe execution service identity" >&2
+        return 1
+    fi
+    return 0
+}
+
+if [ "$1" = configure ]; then
+    verify_identity || exit 1
+
+    if [ -x /usr/bin/deb-systemd-helper ]; then
+        /usr/bin/deb-systemd-helper update-state sonbal-openai.service >/dev/null || {
+            echo "sonbal: failed to update OpenAI service package state" >&2
+            exit 1
+        }
+    fi
+
+    if [ -d /run/systemd/system ]; then
+        /usr/bin/systemctl --system daemon-reload >/dev/null || {
+            echo "sonbal: failed to reload systemd manager after package update" >&2
+            exit 1
+        }
+    fi
+
+    show_disclaimer || exit 1
+fi
+
+exit 0

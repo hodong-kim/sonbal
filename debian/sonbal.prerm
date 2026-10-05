@@ -1,0 +1,79 @@
+#!/bin/sh
+# =============================================================================
+# sonbal.prerm
+# Copyright (c) 2026 Hodong Kim <hodong@nimfsoft.com>
+# SPDX-License-Identifier: 0BSD
+# =============================================================================
+
+set -e
+
+stop_failed=0
+
+verify_service_settled()
+{
+    unit=$1
+    state=$(/usr/bin/systemctl --system show "$unit" --property=ActiveState --value) || {
+        stop_failed=1
+        return 0
+    }
+    pid=$(/usr/bin/systemctl --system show "$unit" --property=MainPID --value) || {
+        stop_failed=1
+        return 0
+    }
+    control_group=$(/usr/bin/systemctl --system show "$unit" --property=ControlGroup --value) || {
+        stop_failed=1
+        return 0
+    }
+
+    case "$state" in
+        inactive|failed)
+            ;;
+        *)
+            echo "sonbal: $unit remains $state during package removal" >&2
+            stop_failed=1
+            ;;
+    esac
+    if [ -n "$pid" ] && [ "$pid" != 0 ]; then
+        echo "sonbal: $unit retains main pid $pid during package removal" >&2
+        stop_failed=1
+    fi
+    if [ -n "$control_group" ]; then
+        cgroup_path="/sys/fs/cgroup${control_group}"
+        if [ -d "$cgroup_path" ]; then
+            events="${cgroup_path}/cgroup.events"
+            if [ ! -r "$events" ]; then
+                echo "sonbal: cannot inspect $unit cgroup events during removal" >&2
+                stop_failed=1
+                return 0
+            fi
+            populated=$(/usr/bin/awk '$1 == "populated" { print $2 }' "$events") || {
+                stop_failed=1
+                return 0
+            }
+            if [ "$populated" != 0 ]; then
+                echo "sonbal: $unit control group remains populated during removal" >&2
+                stop_failed=1
+            fi
+        fi
+    fi
+}
+
+case "$1" in
+    remove|deconfigure)
+        if [ -d /run/systemd/system ]; then
+            /usr/bin/deb-systemd-invoke stop sonbal-openai.service >/dev/null || {
+                echo "sonbal: failed to stop sonbal-openai.service before removal" >&2
+                stop_failed=1
+            }
+            verify_service_settled sonbal-openai.service
+            if [ "$stop_failed" -ne 0 ]; then
+                echo "sonbal: refusing package removal while service shutdown is incomplete" >&2
+                exit 1
+            fi
+        fi
+        ;;
+esac
+
+#DEBHELPER#
+
+exit 0

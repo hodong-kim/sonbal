@@ -1,0 +1,16 @@
+Sonbal allows AI systems to act on the host machine. AI systems can make
+mistakes or behave unexpectedly. Use Sonbal only where failures can be
+safely contained. An isolated or restricted environment is strongly
+recommended.
+
+Do not expose passwords, private keys, access tokens, personal data,
+confidential files, or other sensitive information through Sonbal.
+
+You are responsible for Sonbal's permissions and access scope. To the
+maximum extent permitted by applicable law, the author and contributors
+are not liable for data loss, security incidents, system damage, or
+other damages caused by Sonbal or unexpected AI behavior.
+
+Installation does not start Sonbal. Review this warning before
+activation.
+Use Sonbal at your own risk.

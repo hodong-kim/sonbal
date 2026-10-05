@@ -1,0 +1,52 @@
+-- ============================================================================
+-- sonbal_connector_openai_http_test.gpr
+-- Copyright (c) 2026 Hodong Kim <hodong@nimfsoft.com>
+-- SPDX-License-Identifier: 0BSD
+-- ============================================================================
+
+with "clair_config.gpr";
+with "../sonbal_config.gpr";
+
+project Sonbal_Connector_OpenAI_HTTP_Test is
+   for Languages use ("C");
+   for Source_Dirs use ("../connectors/openai", "openai");
+   for Source_Files use
+     ("sonbal_openai_http.c",
+      "sonbal_connector_openai_http_test.c");
+   for Object_Dir use
+     Sonbal_Config.Tests_Object_Root & "/connector-openai-http";
+   for Exec_Dir use Sonbal_Config.Tests_Exec_Dir;
+   for Create_Missing_Dirs use "True";
+   for Main use ("sonbal_connector_openai_http_test.c");
+
+   package Builder is
+      for Executable ("sonbal_connector_openai_http_test.c") use
+        "sonbal-connector-openai-http-test";
+   end Builder;
+
+   package Compiler is
+      case Clair_Config.Target_OS is
+         when "freebsd" =>
+            for Default_Switches ("C") use
+              ("-std=c11", "-Wall", "-Wextra", "-Werror",
+               "-DSONBAL_OPENAI_HTTP_TESTING=1",
+               "-I/usr/local/include",
+               "-I" & Project'Project_Dir & "../connectors/openai");
+         when others =>
+            for Default_Switches ("C") use
+              ("-std=c11", "-Wall", "-Wextra", "-Werror",
+               "-DSONBAL_OPENAI_HTTP_TESTING=1",
+               "-I" & Project'Project_Dir & "../connectors/openai");
+      end case;
+   end Compiler;
+
+   package Linker is
+      case Clair_Config.Target_OS is
+         when "freebsd" =>
+            for Default_Switches ("C") use
+              ("-L/usr/local/lib", "-lcurl", "-pthread");
+         when others =>
+            for Default_Switches ("C") use ("-lcurl", "-pthread");
+      end case;
+   end Linker;
+end Sonbal_Connector_OpenAI_HTTP_Test;

@@ -1,0 +1,31 @@
+-- ============================================================================
+-- sonbal_connector_openai_protocol_test.gpr
+-- Copyright (c) 2026 Hodong Kim <hodong@nimfsoft.com>
+-- SPDX-License-Identifier: 0BSD
+-- ============================================================================
+
+with "../sonbal_config.gpr";
+
+project Sonbal_Connector_OpenAI_Protocol_Test is
+   for Languages use ("C");
+   for Source_Dirs use ("../connectors/openai", "openai");
+   for Source_Files use
+     ("sonbal_openai_protocol.c",
+      "sonbal_connector_openai_protocol_test.c");
+   for Object_Dir use
+     Sonbal_Config.Tests_Object_Root & "/connector-openai-protocol";
+   for Exec_Dir use Sonbal_Config.Tests_Exec_Dir;
+   for Create_Missing_Dirs use "True";
+   for Main use ("sonbal_connector_openai_protocol_test.c");
+
+   package Builder is
+      for Executable ("sonbal_connector_openai_protocol_test.c") use
+        "sonbal-connector-openai-protocol-test";
+   end Builder;
+
+   package Compiler is
+      for Default_Switches ("C") use
+        ("-std=c11", "-Wall", "-Wextra", "-Werror",
+         "-I" & Project'Project_Dir & "../connectors/openai");
+   end Compiler;
+end Sonbal_Connector_OpenAI_Protocol_Test;

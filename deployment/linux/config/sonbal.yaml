@@ -1,0 +1,8 @@
+# =============================================================================
+# sonbal.yaml
+# Copyright (c) 2026 Hodong Kim <hodong@nimfsoft.com>
+# SPDX-License-Identifier: 0BSD
+# =============================================================================
+
+execution:
+  max_work_slots: 16

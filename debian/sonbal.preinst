@@ -1,0 +1,48 @@
+#!/bin/sh
+# =============================================================================
+# sonbal.preinst
+# Copyright (c) 2026 Hodong Kim <hodong@nimfsoft.com>
+# SPDX-License-Identifier: 0BSD
+# =============================================================================
+
+set -e
+
+verify_existing_identity()
+{
+    if ! /usr/bin/id -u sonbal >/dev/null 2>&1; then
+        return 0
+    fi
+
+    uid=$(/usr/bin/id -u sonbal) || return 1
+    gid=$(/usr/bin/id -g sonbal) || return 1
+    group=$(/usr/bin/id -gn sonbal) || return 1
+    passwd_entry=$(/usr/bin/getent passwd sonbal) || return 1
+    shell=$(printf '%s\n' "$passwd_entry" | /usr/bin/cut -d: -f7) || return 1
+    if [ "$uid" = 0 ]; then
+        echo "sonbal: pre-existing execution identity resolves to root" >&2
+        return 1
+    fi
+    if [ "$gid" = 0 ]; then
+        echo "sonbal: pre-existing execution identity primary GID is root" >&2
+        return 1
+    fi
+    if [ "$group" != sonbal ]; then
+        echo "sonbal: pre-existing execution identity primary group is not sonbal" >&2
+        return 1
+    fi
+    if [ "$shell" != /usr/sbin/nologin ]; then
+        echo "sonbal: pre-existing execution identity is not non-login" >&2
+        return 1
+    fi
+    return 0
+}
+
+case "$1" in
+    install|upgrade)
+        verify_existing_identity || exit 1
+        ;;
+esac
+
+#DEBHELPER#
+
+exit 0

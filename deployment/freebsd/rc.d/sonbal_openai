@@ -1,0 +1,512 @@
+#!/bin/sh
+# =============================================================================
+# sonbal_openai
+# Copyright (c) 2026 Hodong Kim <hodong@nimfsoft.com>
+# SPDX-License-Identifier: 0BSD
+# =============================================================================
+
+# PROVIDE: sonbal_openai
+# REQUIRE: NETWORKING
+# KEYWORD: shutdown
+
+. /etc/rc.subr
+
+name="sonbal_openai"
+rcvar="${name}_enable"
+daemon_command="/usr/sbin/daemon"
+sonbal_command="/usr/local/bin/sonbal"
+state_dir="/var/db/sonbal-openai"
+configuration="/usr/local/etc/sonbal/openai.json"
+credential="${state_dir}/credential"
+supervisor_pidfile="/var/run/sonbal-openai-supervisor.pid"
+child_pidfile="/var/run/sonbal-openai.pid"
+sonbal_pattern="/usr/local/bin/sonbal --connector openai"
+
+start_cmd="sonbal_openai_start"
+stop_cmd="sonbal_openai_stop"
+status_cmd="sonbal_openai_status"
+
+load_rc_config "$name"
+: ${sonbal_openai_enable:=NO}
+
+sonbal_openai_binary_matches()
+{
+  process_pid="$1"
+  expected_path="$2"
+  binary_info=$(/usr/bin/procstat -b -h "$process_pid" 2>&1)
+  procstat_status=$?
+  pathname_missing="procstat: sysctl: kern.proc.pathname: "
+  pathname_missing="${pathname_missing}${process_pid}: "
+  pathname_missing="${pathname_missing}No such file or directory"
+  case "$binary_info" in
+    "$pathname_missing")
+      return 3
+      ;;
+  esac
+  [ "$procstat_status" -eq 0 ] || return 1
+  binary_path=$(printf '%s\n' "$binary_info" |
+    /usr/bin/awk 'NR == 1 { print $4 }') || return 1
+  [ -n "$binary_path" ] || return 1
+  [ "$binary_path" = "$expected_path" ] || return 2
+  return 0
+}
+
+sonbal_openai_pidfile_pid()
+{
+  candidate_pidfile="$1"
+  [ -r "$candidate_pidfile" ] || return 0
+  candidate_pid=$(/usr/bin/head -n 1 "$candidate_pidfile" 2>/dev/null) ||
+    return 1
+  case "$candidate_pid" in
+    ''|0|*[!0-9]*)
+      return 2
+      ;;
+  esac
+  if ! /bin/kill -0 "$candidate_pid" 2>/dev/null; then
+    return 0
+  fi
+  printf '%s\n' "$candidate_pid"
+}
+
+sonbal_openai_candidate_state()
+{
+  process_pid="$1"
+  if ! /bin/kill -0 "$process_pid" 2>/dev/null; then
+    printf '%s\n' gone
+    return 0
+  fi
+
+  process_state=$(/bin/ps -o state= -p "$process_pid" 2>/dev/null)
+  ps_status=$?
+  if [ "$ps_status" -ne 0 ]; then
+    if ! /bin/kill -0 "$process_pid" 2>/dev/null; then
+      printf '%s\n' gone
+      return 0
+    fi
+    return 2
+  fi
+  process_state=$(printf '%s' "$process_state" | /usr/bin/tr -d '[:space:]')
+  [ -n "$process_state" ] || return 2
+  if [ "$process_state" = "Z" ]; then
+    printf '%s\n' zombie
+  else
+    printf '%s\n' live
+  fi
+  return 0
+}
+
+sonbal_openai_instances()
+{
+  verified_parent="${1:-}"
+  sonbal_uid=$(/usr/bin/id -u sonbal) || return 1
+  instance_pids=$(
+    /usr/bin/pgrep -u "$sonbal_uid" -f -x "$sonbal_pattern" 2>/dev/null
+  )
+  pgrep_status=$?
+  case "$pgrep_status" in
+    0)
+      verified_instances=""
+      for instance_pid in $instance_pids; do
+        binary_status=0
+        sonbal_openai_binary_matches "$instance_pid" "$sonbal_command" ||
+          binary_status=$?
+        if [ "$binary_status" -eq 0 ]; then
+          verified_instances="$verified_instances $instance_pid"
+          continue
+        fi
+
+        state_status=0
+        candidate_state=$(sonbal_openai_candidate_state "$instance_pid") ||
+          state_status=$?
+        [ "$state_status" -eq 0 ] || return 2
+        case "$candidate_state" in
+          gone|zombie)
+            ;;
+          live)
+            if [ "$binary_status" -ne 3 ] || [ -z "$verified_parent" ]; then
+              return 2
+            fi
+            child_parent=$(/bin/ps -o ppid= -p "$instance_pid" 2>/dev/null |
+              /usr/bin/tr -d '[:space:]') || return 2
+            [ "$child_parent" = "$verified_parent" ] || return 2
+            verified_instances="$verified_instances $instance_pid"
+            ;;
+          *)
+            return 2
+            ;;
+        esac
+      done
+      for instance_pid in $verified_instances; do
+        printf '%s\n' "$instance_pid"
+      done
+      return 0
+      ;;
+    1)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+sonbal_openai_child_pid()
+{
+  verified_parent="${1:-}"
+  pidfile_status=0
+  pidfile_pid=$(sonbal_openai_pidfile_pid "$child_pidfile") || pidfile_status=$?
+  [ "$pidfile_status" -eq 0 ] || return "$pidfile_status"
+  [ -n "$pidfile_pid" ] || return 0
+
+  sonbal_uid=$(/usr/bin/id -u sonbal) || return 1
+  matched_pid=$(
+    /usr/bin/pgrep -F "$child_pidfile" -u "$sonbal_uid" \
+      -f -x "$sonbal_pattern" 2>/dev/null
+  )
+  pgrep_status=$?
+  case "$pgrep_status" in
+    0)
+      binary_status=0
+      sonbal_openai_binary_matches "$matched_pid" "$sonbal_command" ||
+        binary_status=$?
+      if [ "$binary_status" -eq 0 ]; then
+        printf '%s\n' "$matched_pid"
+        return 0
+      fi
+
+      state_status=0
+      candidate_state=$(sonbal_openai_candidate_state "$matched_pid") ||
+        state_status=$?
+      [ "$state_status" -eq 0 ] || return 2
+      case "$candidate_state" in
+        gone|zombie)
+          return 0
+          ;;
+        live)
+          if [ "$binary_status" -ne 3 ] || [ -z "$verified_parent" ]; then
+            return 2
+          fi
+          child_parent=$(/bin/ps -o ppid= -p "$matched_pid" 2>/dev/null |
+            /usr/bin/tr -d '[:space:]') || return 2
+          [ "$child_parent" = "$verified_parent" ] || return 2
+          printf '%s\n' "$matched_pid"
+          return 0
+          ;;
+        *)
+          return 2
+          ;;
+      esac
+      ;;
+    1)
+      return 0
+      ;;
+    *)
+      if ! /bin/kill -0 "$pidfile_pid" 2>/dev/null; then
+        return 0
+      fi
+      return 1
+      ;;
+  esac
+}
+
+sonbal_openai_supervisor_pid()
+{
+  pidfile_status=0
+  pidfile_pid=$(sonbal_openai_pidfile_pid "$supervisor_pidfile") ||
+    pidfile_status=$?
+  [ "$pidfile_status" -eq 0 ] || return "$pidfile_status"
+  [ -n "$pidfile_pid" ] || return 0
+
+  candidate=$(/usr/bin/pgrep -F "$supervisor_pidfile" -x daemon 2>/dev/null)
+  pgrep_status=$?
+  case "$pgrep_status" in
+    0)
+      sonbal_openai_binary_matches "$candidate" "$daemon_command" || return 2
+      ;;
+    1)
+      return 0
+      ;;
+    *)
+      if ! /bin/kill -0 "$pidfile_pid" 2>/dev/null; then
+        return 0
+      fi
+      return 1
+      ;;
+  esac
+
+  child_pid=$(sonbal_openai_child_pid "$candidate") || return 2
+  [ -n "$child_pid" ] || return 2
+  child_parent=$(/bin/ps -o ppid= -p "$child_pid" 2>/dev/null |
+    /usr/bin/tr -d '[:space:]') || return 1
+  [ -n "$child_parent" ] || return 1
+  [ "$child_parent" = "$candidate" ] || return 2
+
+  printf '%s\n' "$candidate"
+}
+
+sonbal_openai_count_pids()
+{
+  count=0
+  for process_pid in $1; do
+    count=$((count + 1))
+  done
+  printf '%s\n' "$count"
+}
+
+sonbal_openai_settle_orphans()
+{
+  instances="$1"
+  [ -z "$instances" ] && return 0
+
+  /bin/kill -TERM $instances 2>/dev/null || true
+  /bin/pwait -t 12 $instances >/dev/null 2>&1 || true
+  remaining=$(sonbal_openai_instances) || return 1
+  if [ -n "$remaining" ]; then
+    /bin/kill -KILL $remaining 2>/dev/null || true
+    /bin/pwait -t 2 $remaining >/dev/null 2>&1 || true
+  fi
+  remaining=$(sonbal_openai_instances) || return 1
+  [ -z "$remaining" ]
+}
+
+sonbal_openai_wait_start()
+{
+  attempt=0
+  while [ "$attempt" -lt 50 ]; do
+    if supervisor_pid=$(sonbal_openai_supervisor_pid) &&
+       [ -n "$supervisor_pid" ] &&
+       child_pid=$(sonbal_openai_child_pid "$supervisor_pid") &&
+       [ -n "$child_pid" ] &&
+       instances=$(sonbal_openai_instances "$supervisor_pid")
+    then
+      instance_count=$(sonbal_openai_count_pids "$instances")
+      [ "$instance_count" -eq 1 ] &&
+        [ "$child_pid" = "$instances" ] && return 0
+    fi
+    /bin/sleep 0.1
+    attempt=$((attempt + 1))
+  done
+  return 1
+}
+
+sonbal_openai_rollback_start()
+{
+  message="$1"
+  echo "$name: $message" >&2
+  if ! sonbal_openai_stop; then
+    echo "$name: failed to settle partial OpenAI startup; " \
+      "retaining service state for retry" >&2
+  fi
+  return 1
+}
+
+sonbal_openai_start()
+{
+  if ! supervisor_pid=$(sonbal_openai_supervisor_pid); then
+    echo "$name: cannot validate OpenAI supervisor identity" >&2
+    return 1
+  fi
+  if ! instances=$(sonbal_openai_instances "$supervisor_pid"); then
+    echo "$name: cannot inspect OpenAI Sonbal instances" >&2
+    return 1
+  fi
+
+  if [ -n "$supervisor_pid" ]; then
+    if sonbal_openai_status >/dev/null 2>&1; then
+      echo "$name is already running as supervisor pid $supervisor_pid"
+      return 0
+    fi
+    echo "$name: existing OpenAI service state is inconsistent" >&2
+    return 1
+  fi
+  if [ -n "$instances" ]; then
+    echo "$name: OpenAI Sonbal instance exists without " \
+      "verified daemon supervisor" >&2
+    return 1
+  fi
+
+  if [ ! -x "$sonbal_command" ]; then
+    echo "$name: $sonbal_command is missing" >&2
+    return 1
+  fi
+  /usr/bin/id -u sonbal >/dev/null 2>&1 || {
+    echo "$name: sonbal identity is missing" >&2
+    return 1
+  }
+  if [ ! -r "$configuration" ]; then
+    echo "$name: configuration is missing at $configuration" >&2
+    return 1
+  fi
+
+  if [ ! -d "$state_dir" ]; then
+    /usr/bin/install -d -o root -g wheel -m 0700 "$state_dir" || return 1
+  fi
+  state=$(/usr/bin/stat -f '%Su:%Sg:%Lp' "$state_dir") || return 1
+  if [ "$state" != "root:wheel:700" ]; then
+    echo "$name: unexpected credential-state directory $state" >&2
+    return 1
+  fi
+  if [ ! -f "$credential" ]; then
+    echo "$name: credential is missing at $credential" >&2
+    return 1
+  fi
+  state=$(/usr/bin/stat -f '%Su:%Sg:%Lp' "$credential") || return 1
+  if [ "$state" != "root:wheel:600" ]; then
+    echo "$name: unexpected credential file state $state" >&2
+    return 1
+  fi
+
+  /bin/rm -f "$supervisor_pidfile" "$child_pidfile"
+  if ! exec 3< "$credential"; then
+    echo "$name: cannot open OpenAI credential" >&2
+    return 1
+  fi
+
+  umask 002
+  launch_status=0
+  /usr/bin/env -i PATH=/usr/local/bin:/usr/bin:/bin \
+    "$daemon_command" -f -P "$supervisor_pidfile" -p "$child_pidfile" \
+    -u sonbal "$sonbal_command" --connector openai || launch_status=$?
+  exec 3<&-
+
+  if [ "$launch_status" -ne 0 ]; then
+    sonbal_openai_rollback_start "daemon failed to launch OpenAI connector"
+    return 1
+  fi
+  if ! sonbal_openai_wait_start; then
+    sonbal_openai_rollback_start \
+      "OpenAI connector failed to establish verified service identity"
+    return 1
+  fi
+  if ! sonbal_openai_status >/dev/null 2>&1; then
+    sonbal_openai_rollback_start \
+      "OpenAI connector failed final service validation"
+    return 1
+  fi
+
+  echo "$name started: supervisor pid $supervisor_pid, Sonbal pid $child_pid"
+}
+
+sonbal_openai_stop()
+{
+  result=0
+  supervisor_status=0
+  supervisor_pid=$(sonbal_openai_supervisor_pid) || supervisor_status=$?
+  if [ "$supervisor_status" -ne 0 ]; then
+    echo "$name: OpenAI supervisor pidfile identity is ambiguous" >&2
+    if instances=$(sonbal_openai_instances); then
+      if ! sonbal_openai_settle_orphans "$instances"; then
+        echo "$name: OpenAI Sonbal settlement remains incomplete" >&2
+      fi
+    fi
+    echo "$name: retaining pidfiles because supervisor identity " \
+      "is unresolved" >&2
+    return 1
+  fi
+
+  if ! instances=$(sonbal_openai_instances "$supervisor_pid"); then
+    echo "$name: cannot inspect OpenAI Sonbal instances during stop" >&2
+    return 1
+  fi
+  instance_count=$(sonbal_openai_count_pids "$instances")
+  if [ "$instance_count" -gt 1 ]; then
+    echo "$name: invariant violation: $instance_count " \
+      "OpenAI Sonbal instances" >&2
+    result=1
+  fi
+
+  if [ -z "$supervisor_pid" ]; then
+    if [ -z "$instances" ]; then
+      /bin/rm -f "$supervisor_pidfile" "$child_pidfile"
+      echo "$name is not running"
+      return 0
+    fi
+    echo "$name: recovering OpenAI Sonbal without verified " \
+      "daemon supervisor" >&2
+    if ! sonbal_openai_settle_orphans "$instances"; then
+      echo "$name: OpenAI Sonbal settlement remains incomplete" >&2
+      return 1
+    fi
+    /bin/rm -f "$supervisor_pidfile" "$child_pidfile"
+    [ "$result" -eq 0 ] && echo "$name stopped"
+    return "$result"
+  fi
+
+  /bin/kill -TERM "$supervisor_pid" 2>/dev/null || true
+  /bin/pwait -t 15 "$supervisor_pid" >/dev/null 2>&1 || true
+  if /bin/kill -0 "$supervisor_pid" 2>/dev/null; then
+    echo "$name: forcing nonresponsive OpenAI shutdown" >&2
+    if ! remaining=$(sonbal_openai_instances "$supervisor_pid"); then
+      echo "$name: cannot inspect OpenAI child during forced shutdown" >&2
+      return 1
+    fi
+    if [ -n "$remaining" ]; then
+      /bin/kill -KILL $remaining 2>/dev/null || true
+      /bin/pwait -t 2 $remaining >/dev/null 2>&1 || true
+    fi
+    /bin/kill -KILL "$supervisor_pid" 2>/dev/null || true
+    /bin/pwait -t 2 "$supervisor_pid" >/dev/null 2>&1 || true
+  fi
+
+  if /bin/kill -0 "$supervisor_pid" 2>/dev/null; then
+    echo "$name: daemon supervisor remains alive after forced shutdown" >&2
+    return 1
+  fi
+  if ! remaining=$(sonbal_openai_instances); then
+    echo "$name: cannot verify OpenAI Sonbal settlement" >&2
+    return 1
+  fi
+  if [ -n "$remaining" ]; then
+    echo "$name: OpenAI Sonbal survived supervisor shutdown; " \
+      "settling orphan" >&2
+    if ! sonbal_openai_settle_orphans "$remaining"; then
+      echo "$name: OpenAI Sonbal remains alive after supervisor shutdown" >&2
+      return 1
+    fi
+  fi
+
+  /bin/rm -f "$supervisor_pidfile" "$child_pidfile"
+  if [ "$result" -eq 0 ]; then
+    echo "$name stopped"
+  else
+    echo "$name: stopped after OpenAI-instance invariant violation" >&2
+  fi
+  return "$result"
+}
+
+sonbal_openai_status()
+{
+  if ! supervisor_pid=$(sonbal_openai_supervisor_pid); then
+    echo "$name: cannot validate OpenAI supervisor identity" >&2
+    return 1
+  fi
+  if ! instances=$(sonbal_openai_instances "$supervisor_pid"); then
+    echo "$name: cannot inspect OpenAI Sonbal instances" >&2
+    return 1
+  fi
+  instance_count=$(sonbal_openai_count_pids "$instances")
+
+  if [ -z "$supervisor_pid" ]; then
+    if [ -n "$instances" ]; then
+      echo "$name: $instance_count OpenAI Sonbal instance(s) exist " \
+        "without verified supervisor" >&2
+    else
+      echo "$name is not running"
+    fi
+    return 1
+  fi
+  if [ "$instance_count" -ne 1 ]; then
+    echo "$name: expected one OpenAI Sonbal instance, found $instance_count" >&2
+    return 1
+  fi
+
+  child_pid=$(sonbal_openai_child_pid "$supervisor_pid") || return 1
+  if [ -z "$child_pid" ] || [ "$child_pid" != "$instances" ]; then
+    echo "$name: OpenAI child pidfile does not match verified instance" >&2
+    return 1
+  fi
+
+  echo "$name is running: supervisor pid $supervisor_pid, Sonbal pid $child_pid"
+}
+
+run_rc_command "$1"

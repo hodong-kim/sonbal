@@ -1,0 +1,32 @@
+# =============================================================================
+# sonbal-openai.service
+# Copyright (c) 2026 Hodong Kim <hodong@nimfsoft.com>
+# SPDX-License-Identifier: 0BSD
+# =============================================================================
+
+[Unit]
+Description=Sonbal OpenAI connector service
+Wants=network-online.target
+After=network-online.target
+StartLimitIntervalSec=60s
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=sonbal
+Group=sonbal
+UMask=0002
+OpenFile=/var/lib/sonbal-openai/credential:openai-credential:read-only
+ExecStart=/usr/bin/sonbal --connector openai
+StandardInput=null
+StandardOutput=null
+StandardError=journal
+Delegate=yes
+KillMode=mixed
+KillSignal=SIGTERM
+TimeoutStopSec=15s
+Restart=on-failure
+RestartSec=2s
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,47 @@
+-- ============================================================================
+-- sonbal_config.gpr
+-- Copyright (c) 2026 Hodong Kim <hodong@nimfsoft.com>
+-- SPDX-License-Identifier: 0BSD
+-- ============================================================================
+
+with "clair_config.gpr";
+
+abstract project Sonbal_Config is
+
+   for Source_Dirs use ();
+
+   Target_Name := Clair_Config.Target_Name;
+
+   type Build_Profile_Type is ("debug", "release");
+   Build_Profile : Build_Profile_Type :=
+     external ("SONBAL_BUILD_PROFILE", "debug");
+   Build_Profile_Name := external ("SONBAL_BUILD_PROFILE", "debug");
+
+   Clair_Library_Type_Name :=
+     external ("CLAIR_LIBRARY_TYPE", "static-pic");
+
+   Product_Artifact_Profile_Name :=
+     Build_Profile_Name & "-clair-" &
+     Clair_Config.Artifact_Profile_Name & "-" &
+     Clair_Library_Type_Name;
+
+   Test_Artifact_Profile_Name :=
+     "test-clair-" &
+     Clair_Config.Artifact_Profile_Name & "-" &
+     Clair_Library_Type_Name;
+
+   Product_Object_Dir :=
+     "build/obj/" & Target_Name & "/" &
+     Product_Artifact_Profile_Name & "/product";
+   Product_Exec_Dir :=
+     "build/bin/" & Target_Name & "/" &
+     Product_Artifact_Profile_Name;
+
+   Tests_Object_Root :=
+     "../build/obj/" & Target_Name & "/" &
+     Test_Artifact_Profile_Name & "/tests";
+   Tests_Exec_Dir :=
+     "../build/bin/" & Target_Name & "/" &
+     Test_Artifact_Profile_Name & "/tests";
+
+end Sonbal_Config;
