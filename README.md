@@ -154,9 +154,10 @@ rake build
 rake test
 ```
 
-Sonbal consumes a clean Clair source checkout and places consumer-owned Clair
-artifacts under Sonbal's `build/deps/clair`. Product and test outputs remain
-inside Sonbal's own build tree.
+Sonbal consumes a clean Clair source checkout. Clair is available at
+https://github.com/hodong-kim/clair. Consumer-owned Clair artifacts are placed
+under Sonbal's `build/deps/clair`. Product and test outputs remain inside
+Sonbal's own build tree.
 
 Additional validation targets are documented in
 [`docs/workflows/build-and-validation.md`](docs/workflows/build-and-validation.md).
